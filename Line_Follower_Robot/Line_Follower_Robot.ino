@@ -2,39 +2,33 @@
 #define CUSTOM_SETTINGS               // Biến cho việc điều khiển bằng app
 #define INCLUDE_GAMEPAD_MODULE        // Biến gamepad
 #include <DabbleESP32.h>
-#include <ESP32Servo.h>
 
 #include <QTRSensors.h>
-int16_t lastPosition = 3500;  // Biến lưu giá trị position trước đó
+
 int speedSelect[] = {120, 180, 255}; // Mảng lưu 3 tốc độ
 
-int servoPin1 = 17;
-int servoPin2 = 2;
-int servoPin3 = 4;
-int relay =23;
-Servo myServo1;
-Servo myServo2;
-Servo myServo3;
-bool Sv1 = 0;
-bool Sv2 = 0; 
-bool Sv3 = 0;
-#define R_PWM1 18 // Chân RPWM cho  
-#define L_PWM1 19 // Chân LPWM cho BTS1
-#define R_PWM2 21 // Chân RPWM cho BTS2
-#define L_PWM2 22 // Chân LPWM cho BTS2
+#define IN1 21                        // Chân IN1 của L298N
+#define IN2 22                        // Chân IN2 của L298N
+#define IN3 16                        // Chân IN3 của L298N
+#define IN4 17                        // Chân IN4 của L298N
+#define ENA 18                        // Chân điều khiển tốc độ động cơ trái (LPWM)
+#define ENB 19                        // Chân điều khiển tốc độ động cơ phải (RPWM)
 //qtr.setSensorPins((const uint8_t[]){32/*7*/ , 35/*6*/, 34, 13, 12, 14, 27, 26}, SensorCount);
 
 QTRSensors qtr;
+
+#define BUZZER 2    // chân điều khiển loa
 const uint8_t SensorCount = 8;
 uint16_t sensorValues[SensorCount];
 int threshold[SensorCount];
+
 #define LED 5
 
-int Speed = 250; //max150
+int Speed = 150; //max150
 
-float Kp = 0.7;
+float Kp = 2;
 float Ki = 0.0;
-float Kd = 4; 
+float Kd = 5; 
 int  P;
 int  I;
 int  D;
@@ -61,20 +55,17 @@ int lsp, rsp;
 int lfspeed = 230;
 
 void setup() {
-  pinMode(R_PWM1, OUTPUT);
-  pinMode(L_PWM1, OUTPUT);
-  pinMode(R_PWM2, OUTPUT);
-  pinMode(L_PWM2, OUTPUT);
-  pinMode(relay, OUTPUT);
-  myServo1.attach(servoPin1); // Gán servo 1 vào chân 17
-  myServo2.attach(servoPin2); // Gán servo 2 vào chân 16
-  myServo3.attach(servoPin3); // Gán servo 3 vào chân 4
-  myServo1.write(10); // Đặt vị trí ban đầu của servo  b
-  myServo2.write(90); // Đặt vị trí ban đầu của servo   
-  myServo3.write(195); // Đặt vị trí ban đầu của servo  ud
-
+  pinMode(BUZZER, OUTPUT);
+  for (int i = 2000; i < 3500; i += 500) {
+    tone(BUZZER, i, 100);
+    delay(100);
+  }
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
   Serial.begin(115200);
-  Dabble.begin("acantat");
+  Dabble.begin("wavextensa");
   qtr.setTypeAnalog();
   qtr.setSensorPins((const uint8_t[]){32/*7*/ , 35/*6*/, 34, 13, 12, 14, 27, 26}, SensorCount);
   pinMode(LED, OUTPUT);
@@ -83,7 +74,7 @@ void setup() {
   Serial.println("Calib");
   for(int i = 0; i < 400; i++){
     qtr.calibrate();
-    delay(10);
+    delay(20);
   }
    for (uint8_t i = 0; i < SensorCount; i++)
   {
@@ -100,34 +91,46 @@ void setup() {
     delay(200);
   }
   Serial.println("Calib Done!");
+  for (int i = 2000; i < 3500; i += 500) {
+    tone(BUZZER, i, 100);
+    delay(100);
+  }
   delay(1000);
 }
 
+
 void speed_run(int speedDC_left, int speedDC_right) {
-  // Điều khiển động cơ trái (BTS1)
+  // Điều khiển động cơ trái
   if (speedDC_left > 0) {
-    analogWrite(R_PWM1, speedDC_left); // Điều chỉnh tốc độ
-    analogWrite(L_PWM1, 0); // Dừng chiều ngược
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+    analogWrite(ENA, speedDC_left); // Điều chỉnh tốc độ
   } else if (speedDC_left < 0) {
-    analogWrite(R_PWM1, 0); // Dừng chiều thuận
-    analogWrite(L_PWM1, abs(speedDC_left)); // Điều chỉnh tốc độ
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, HIGH);
+    analogWrite(ENA, abs(speedDC_left)); // Điều chỉnh tốc độ
   } else {
-    analogWrite(R_PWM1, 0);
-    analogWrite(L_PWM1, 0); // Dừng động cơ
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, LOW);
+    analogWrite(ENA, 0); // Dừng động cơ
   }
   
-  // Điều khiển động cơ phải (BTS2)
+  // Điều khiển động cơ phải
   if (speedDC_right > 0) {
-    analogWrite(R_PWM2, speedDC_right); // Điều chỉnh tốc độ
-    analogWrite(L_PWM2, 0); // Dừng chiều ngược
+    digitalWrite(IN3, HIGH);
+    digitalWrite(IN4, LOW);
+    analogWrite(ENB, speedDC_right); // Điều chỉnh tốc độ
   } else if (speedDC_right < 0) {
-    analogWrite(R_PWM2, 0); // Dừng chiều thuận
-    analogWrite(L_PWM2, abs(speedDC_right)); // Điều chỉnh tốc độ
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, HIGH);
+    analogWrite(ENB, abs(speedDC_right)); // Điều chỉnh tốc độ
   } else {
-    analogWrite(R_PWM2, 0);
-    analogWrite(L_PWM2, 0); // Dừng động cơ
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, LOW);
+    analogWrite(ENB, 0); // Dừng động cơ
   }
 }
+
 int frame = 0;
 int speedy = 0;
 int mode = 0;
@@ -135,8 +138,7 @@ int mode = 0;
 void pid() {
   int16_t position = qtr.readLineWhite(sensorValues);
   Serial.println(position);
-  int error = 3500 - position; 
-  
+  int error = 3500 - position;  
   P = error;
   I = I + error;
   D = error - lastError;
@@ -147,12 +149,6 @@ void pid() {
   int motorspeeda = basespeeda + motorspeed / 2;
   int motorspeedb = basespeedb - motorspeed / 2;
   
-  if (((lastPosition < 3700)&&(lastPosition > 3200)) && (position == 0 || position == 7000)) {
-    // Nếu có sự thay đổi đột ngột, di chuyển thẳng (line ngắt quãng)
-    motorspeeda = basespeeda;
-    motorspeedb = basespeedb;
-  }
-
   if (motorspeeda > maxspeeda) {
     motorspeeda = maxspeeda;
   }
@@ -165,8 +161,6 @@ void pid() {
   if (motorspeedb < 0) {
     motorspeedb = -maxspeeda/2;
   } 
-   // Lưu lại giá trị position trước đó
-  lastPosition = position;
   speed_run(motorspeeda, motorspeedb);
 }
 
@@ -191,45 +185,14 @@ void loop() {
       Dabble.processInput();
     }
     mode++;
+    for (int i = 2000; i < 3500; i += 500) {
+      tone(BUZZER, i, 100);
+      delay(100);
+    }
     if (mode > 1) {
       mode = 0;
     }
   }
-
-   if (GamePad.isSquarePressed()) {///nâng tay gắp u/d
-    while (GamePad.isSquarePressed()) {
-      Dabble.processInput();
-    }
-    Sv1=!Sv1;
-  }
-   if(Sv1)myServo1.write(90);//bắn
-    else myServo1.write(20);
-  if (GamePad.isTrianglePressed()) {
-    while (GamePad.isTrianglePressed()) {
-      Dabble.processInput();
-    }
-    Sv2=!Sv2;
-  }
-  if(Sv2)myServo2.write(60);//cặp nhả
-    else myServo2.write(0);
-  if (GamePad.isCirclePressed()) {
-    while (GamePad.isCirclePressed()) {
-      Dabble.processInput();
-    }
-    Sv3=!Sv3;
-  }
-  if(Sv3){
-    myServo3.write(0);
-  }
-    else myServo3.write(180);
-
-
-    if (GamePad.isCrossPressed()){//relay
-    while(GamePad.isCrossPressed()){
-      Dabble.processInput();
-    }
-        digitalWrite(relay, !digitalRead(relay));
-    }
 
   // Hành vi dựa trên mode
   if (mode == 1) {
@@ -246,6 +209,7 @@ void loop() {
           frame = 0;
         }
       }
+
       pid();
       
       if (GamePad.isStartPressed()) {
@@ -253,6 +217,10 @@ void loop() {
           Dabble.processInput();
         }
         mode++;
+        for (int i = 2000; i < 3500; i += 500) {
+          tone(BUZZER, i, 100);
+          delay(100);
+      }
         if (mode > 1) {
           mode = 0;
         }
@@ -269,12 +237,12 @@ void loop() {
       speed_run(speedy, -speedy); // Quẹo trái
     } else if (GamePad.isRightPressed()) {
       speed_run(-speedy, speedy); // Quẹo phải
-    // } else if (GamePad.isSquarePressed()) {
-    //   speed_run(speedy, 0); // Tiến bên trái
-    // } else if (GamePad.isCirclePressed()) {
-    //   speed_run(0, speedy); // Tiến bên phải
-     }else {
-      speed_run(speedy, speedy); // Tiến thẳng 
+    } else if (GamePad.isSquarePressed()) {
+      speed_run(speedy, 0); // Tiến bên trái
+    } else if (GamePad.isCirclePressed()) {
+      speed_run(0, speedy); // Tiến bên phải
+    } else {
+      speed_run(speedy, speedy); // Tiến thẳng
     }
   } else if (GamePad.isDownPressed()) {
     Serial.print("DOWN");
@@ -283,11 +251,11 @@ void loop() {
       speed_run(speedy, -speedy); // Quẹo trái khi lùi
     } else if (GamePad.isRightPressed()) {
       speed_run(-speedy, speedy); // Quẹo phải khi lùi
-    // } else if (GamePad.isSquarePressed()) {
-    //   speed_run(-speedy, 0); // Lùi bên trái
-    // } else if (GamePad.isCirclePressed()) {
-    //   speed_run(0, -speedy); // Lùi bên phải
-    }else {
+    } else if (GamePad.isSquarePressed()) {
+      speed_run(-speedy, 0); // Lùi bên trái
+    } else if (GamePad.isCirclePressed()) {
+      speed_run(0, -speedy); // Lùi bên phải
+    } else {
       speed_run(-speedy, -speedy); // Lùi thẳng
     }
   } else if (GamePad.isLeftPressed()) {
@@ -296,29 +264,45 @@ void loop() {
   } else if (GamePad.isRightPressed()) {
     Serial.print("Right");
     speed_run(-speedy, speedy); // Quẹo phải
-   } else if (GamePad.isSquarePressed()) {
-     Serial.print("Square");
-  //   speed_run(0, speedy); // Tiến bên trái
-   } else if (GamePad.isCirclePressed()) {
-     Serial.print("Circle");
-  //   speed_run(speedy, 0); // Tiến bên phải
-   } else if (GamePad.isCrossPressed()) {
-     Serial.print("Cross");
-   } else if (GamePad.isTrianglePressed()) {
-     Serial.print("Triangle");
-   } else if (GamePad.isStartPressed()) {
-     Serial.print("Start");
-   } else if (GamePad.isSelectPressed()) {
-     Serial.print("Select");
-  }
-   else {
+  } else if (GamePad.isSquarePressed()) {
+    Serial.print("Square");
+    speed_run(0, speedy); // Tiến bên trái
+  } else if (GamePad.isCirclePressed()) {
+    Serial.print("Circle");
+    speed_run(speedy, 0); // Tiến bên phải
+  } else if (GamePad.isCrossPressed()) {
+    Serial.print("Cross");
+  } else if (GamePad.isTrianglePressed()) {
+    Serial.print("Triangle");
+  } else if (GamePad.isStartPressed()) {
+    Serial.print("Start");
+  } else if (GamePad.isSelectPressed()) {
+    Serial.print("Select");
+  } else {
     speed_run(0, 0); // Dừng
   }
 
   Serial.print('\t');
 }
 
-
+void robot_control(){
+  // read calibrated sensor values and obtain a measure of the line position
+  // from 0 to 4000 (for a white line, use readLineWhite() instead)
+  position = qtr.readLineWhite(sensorValues);
+  error = 2000 - position;
+  while(sensorValues[0]>=980 && sensorValues[1]>=980 && sensorValues[2]>=980 && sensorValues[3]>=980 && sensorValues[4]>=980){ // A case when the line follower leaves the line
+    if(previousError>0){       //Turn left if the line was to the left before
+      speed_run(-230,230);
+    }
+    else{
+      speed_run(230,-230); // Else turn right
+    }
+    position = qtr.readLineWhite(sensorValues);
+  }
+  
+  PID_Linefollow(error);
+  //PID_Linefollow(error);
+}
 void PID_Linefollow(int error){
     P = error;
     I = I + error;
@@ -349,21 +333,3 @@ void PID_Linefollow(int error){
     speed_run(lsp,rsp);
 }
 
-void robot_control(){
-  // read calibrated sensor values and obtain a measure of the line position
-  // from 0 to 4000 (for a white line, use readLineWhite() instead)
-  position = qtr.readLineWhite(sensorValues);
-  error = 3500 - position;
-  while(sensorValues[0]>=980 && sensorValues[1]>=980 && sensorValues[2]>=980 && sensorValues[3]>=980 && sensorValues[4]>=980&& sensorValues[5]>=980 && sensorValues[6]>=980 && sensorValues[7]>=980){ // A case when the line follower leaves the line
-    if(previousError>0){       //Turn left if the line was to the left before
-      speed_run(-230,230);
-    }
-    else{
-      speed_run(230,-230); // Else turn right
-    }
-    position = qtr.readLineWhite(sensorValues);
-  }
-  
-  PID_Linefollow(error);
-  //PID_Linefollow(error);
-}
